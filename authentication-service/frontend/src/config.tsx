@@ -7,10 +7,7 @@ import { PasswordlessPreBuiltUI } from "supertokens-auth-react/recipe/passwordle
 import Session from "supertokens-auth-react/recipe/session";
 import OAuth2Provider from "supertokens-auth-react/recipe/oauth2provider";
 import { OAuth2ProviderPreBuiltUI } from "supertokens-auth-react/recipe/oauth2provider/prebuiltui";
-import EmailPassword, {
-  EmailPasswordComponentsOverrideProvider,
-} from "supertokens-auth-react/recipe/emailpassword";
-import { EmailPasswordPreBuiltUI } from "supertokens-auth-react/recipe/emailpassword/prebuiltui";
+import { useEffect } from "react";
 
 import SuperTokens from "supertokens-auth-react";
 
@@ -49,26 +46,45 @@ export const SuperTokensConfig = {
         functions: (originalImplementation) => {
           return {
             ...originalImplementation,
+            // Save the oauth login challenge in order to be able
+            // to access it when the user opens the magic link
+            setLoginAttemptInfo: (input) => {
+              const queryParams = new URLSearchParams(window.location.search);
+              const loginChallenge = queryParams.get("loginChallenge");
+              return originalImplementation.setLoginAttemptInfo({
+                ...input,
+                attemptInfo: {
+                  loginChallenge,
+                  ...input.attemptInfo,
+                },
+              });
+            },
+            // Access the saved login challenge and persist it in the URL
+            // This is required because after the passwordless flow is completed
+            // the loginAttemptInfo data gets cleared
+            consumeCode: async (input) => {
+              const attemptInfo = await Passwordless.getLoginAttemptInfo();
+              const loginChallenge = attemptInfo.loginChallenge;
+              const urlParams = new URLSearchParams(window.location.search);
+              urlParams.set("loginChallenge", loginChallenge);
+              window.history.pushState(
+                {},
+                "",
+                window.location.pathname + "?" + urlParams.toString(),
+              );
+              return await originalImplementation.consumeCode(input);
+            },
           };
         },
-      },
-      preAPIHook: async (context) => {
-        const queryParams = new URLSearchParams(window.location.search);
-        const updatedUrl = new URL(context.url);
-        for (const [key, value] of queryParams) {
-          updatedUrl.searchParams.set(key, value);
-        }
-        return {
-          ...context,
-          url: updatedUrl.toString(),
-        };
       },
     }),
     OAuth2Provider.init(),
     Session.init(),
   ],
+  // Redirect the user based on the OAuth2 state
   getRedirectionURL: async (context) => {
     if (context.action === "SUCCESS" && context.recipeId === "passwordless") {
+      const attemptInfo = await Passwordless.getLoginAttemptInfo();
       const queryParams = new URLSearchParams(window.location.search);
       const redirectUrlResponse =
         await OAuth2Provider.getRedirectURLToContinueOAuthFlow({
@@ -92,6 +108,8 @@ export const PreBuiltUIList = [
   OAuth2ProviderPreBuiltUI,
 ];
 
+// Use this override if you want to force the user
+// to return to the original tab after they have accessed the magic link
 export const ComponentWrapper = (props: {
   children: JSX.Element;
 }): JSX.Element => {
@@ -100,50 +118,36 @@ export const ComponentWrapper = (props: {
   childrenToRender = (
     <PasswordlessComponentsOverrideProvider
       components={{
-        PasswordlessUserInputCodeFormFooter_Override: ({
-          DefaultComponent,
-          ...cProps
-        }) => {
-          const loginAttemptInfo = cProps.loginAttemptInfo;
-          let showQuotaMessage = false;
-
-          if (loginAttemptInfo.contactMethod === "PHONE") {
-            showQuotaMessage = true;
-          }
-
-          return (
-            <div
-              style={{
-                width: "100%",
-              }}
-            >
-              <DefaultComponent {...cProps} />
-              {showQuotaMessage && (
-                <div
-                  style={{
-                    width: "100%",
-                    paddingLeft: 12,
-                    paddingRight: 12,
-                    paddingTop: 6,
-                    paddingBottom: 6,
-                    borderRadius: 4,
-                    backgroundColor: "#EF9A9A",
-                    margin: 0,
-                    boxSizing: "border-box",
-                    MozBoxSizing: "border-box",
-                    WebkitBoxSizing: "border-box",
-                    fontSize: 12,
-                    textAlign: "start",
-                    fontWeight: "bold",
-                    lineHeight: "18px",
-                  }}
-                >
-                  There is a daily quota for the free SMS service, if you do not
-                  receive the SMS please try again tomorrow.
-                </div>
-              )}
-            </div>
-          );
+        PasswordlessLinkSent_Override: ({ DefaultComponent, ...props }) => {
+          useEffect(() => {
+            const onVisibilityChange = async (e) => {
+              if (document.hidden) return;
+              const loginAttemptInfo = await Passwordless.getLoginAttemptInfo();
+              const queryParams = new URLSearchParams(window.location.search);
+              // If the user returns to the original tab
+              // redirect them to a page that informs them about the authentication state
+              // or tells them to close the tab
+              if (!loginAttemptInfo) {
+                window.location.href = "/dashboard";
+              }
+              // Otherwise you can make use of this page to complete the OAuth2 flow
+              // when the user returns to it
+              // if (loginAttemptInfo) return;
+              // const redirectUrlResponse =
+              //   await OAuth2Provider.getRedirectURLToContinueOAuthFlow({
+              //     loginChallenge: queryParams.get("loginChallenge"),
+              //   });
+              // window.location.href = redirectUrlResponse.frontendRedirectTo;
+            };
+            document.addEventListener("visibilitychange", onVisibilityChange);
+            return () => {
+              document.removeEventListener(
+                "visibilitychange",
+                onVisibilityChange,
+              );
+            };
+          }, []);
+          return <DefaultComponent {...props} />;
         },
       }}
     >
