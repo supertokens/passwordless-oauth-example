@@ -1,0 +1,31 @@
+{
+  "name": "oauth2-api",
+  "version": "1.0.0",
+  "description": "OAuth2 API using Passport and Express with TypeScript",
+  "main": "dist/server.js",
+  "scripts": {
+    "start": "node dist/server.js",
+    "dev": "nodemon src/server.ts",
+    "build": "tsc",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "passport": "^0.6.0",
+    "passport-oauth2": "^1.7.0",
+    "express-session": "^1.17.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1",
+    "typescript": "^5.0.0",
+    "ts-node": "^10.9.0",
+    "@types/node": "^20.0.0",
+    "@types/express": "^4.17.17",
+    "@types/passport": "^1.0.12",
+    "@types/passport-oauth2": "^1.4.12",
+    "@types/express-session": "^1.17.7",
+    "@types/cors": "^2.8.13"
+  }
+}
