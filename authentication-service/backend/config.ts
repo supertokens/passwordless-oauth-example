@@ -18,6 +18,7 @@ export function getWebsiteDomain() {
 }
 
 export const SuperTokensConfig: TypeInput = {
+  debug: true,
   supertokens: {
     connectionURI: "<CONNECTION_URI>",
     apiKey: "<API_KEY>",
