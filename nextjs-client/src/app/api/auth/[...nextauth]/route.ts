@@ -2,8 +2,8 @@ import NextAuth from "next-auth";
 import type { NextAuthOptions } from "next-auth";
 
 const AUTH_SERVER_ENDPOINT = "http://localhost:3001";
-const SUPERTOKENS_CLIENT_ID = "<YOUR_CLIENT_ID>";
-const SUPERTOKENS_CLIENT_SECRET = "<YOUR_CLIENT_SECRET>";
+const SUPERTOKENS_CLIENT_ID = "<OAUTH_CLIENT_ID>";
+const SUPERTOKENS_CLIENT_SECRET = "<OAUTH_CLIENT_SECRET>";
 
 const authOptions: NextAuthOptions = {
   debug: true,
@@ -20,6 +20,7 @@ const authOptions: NextAuthOptions = {
         params: {
           scope: "offline_access email openid",
           response_type: "code",
+          domain: "custom-domain.com",
         },
       },
       token: {
@@ -29,7 +30,6 @@ const authOptions: NextAuthOptions = {
       clientSecret: SUPERTOKENS_CLIENT_SECRET,
       idToken: true,
       profile(profile) {
-        console.log("[SuperTokensProvider] Raw profile:", profile);
         return {
           id: profile.sub,
           name: profile.name || profile.sub,
@@ -38,38 +38,6 @@ const authOptions: NextAuthOptions = {
       },
     },
   ],
-  callbacks: {
-    async jwt({ token, account }) {
-      console.log(
-        "[SuperTokensProvider] JWT callback received:",
-        token,
-        account,
-      );
-      if (account) {
-        token.accessToken = account.access_token;
-        token.refreshToken = account.refresh_token;
-      }
-      return token;
-    },
-    async session({ session, token }) {
-      console.log(
-        "[SuperTokensProvider] Session callback received:",
-        session,
-        token,
-      );
-      session.accessToken = token.accessToken;
-      return session;
-    },
-    async signIn({ user, account, profile }) {
-      console.log(
-        "[SuperTokensProvider] SignIn callback received:",
-        user,
-        account,
-        profile,
-      );
-      return true;
-    },
-  },
   session: { strategy: "jwt" },
   secret: "secret",
 };

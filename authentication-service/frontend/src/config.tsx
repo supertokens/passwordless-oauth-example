@@ -23,6 +23,14 @@ export function getWebsiteDomain() {
   return websiteUrl;
 }
 
+function getDomainFromQuery() {
+  if (typeof window === "undefined") {
+    return undefined;
+  }
+  const queryParams = new URLSearchParams(window.location.search);
+  return queryParams.get("domain") || undefined;
+}
+
 export const styleOverride = `
 [data-supertokens~=tenants-link] {
     margin-top: 8px;
@@ -42,6 +50,32 @@ export const SuperTokensConfig = {
   recipeList: [
     Passwordless.init({
       contactMethod: "EMAIL",
+      preAPIHook: async (context) => {
+        if (
+          context.action !== "PASSWORDLESS_CREATE_CODE" &&
+          context.action !== "PASSWORDLESS_RESEND_CODE"
+        ) {
+          return { url: context.url, requestInit: context.requestInit };
+        }
+
+        const domain = getDomainFromQuery();
+        if (!domain) {
+          return { url: context.url, requestInit: context.requestInit };
+        }
+
+        const body =
+          context.requestInit.body === undefined
+            ? {}
+            : JSON.parse(context.requestInit.body as string);
+
+        return {
+          url: context.url,
+          requestInit: {
+            ...context.requestInit,
+            body: JSON.stringify({ ...body, domain }),
+          },
+        };
+      },
       override: {
         functions: (originalImplementation) => {
           return {
@@ -70,7 +104,7 @@ export const SuperTokensConfig = {
               window.history.pushState(
                 {},
                 "",
-                window.location.pathname + "?" + urlParams.toString(),
+                window.location.pathname + "?" + urlParams.toString()
               );
               return await originalImplementation.consumeCode(input);
             },
@@ -86,10 +120,11 @@ export const SuperTokensConfig = {
     if (context.action === "SUCCESS" && context.recipeId === "passwordless") {
       const attemptInfo = await Passwordless.getLoginAttemptInfo();
       const queryParams = new URLSearchParams(window.location.search);
-      const redirectUrlResponse =
-        await OAuth2Provider.getRedirectURLToContinueOAuthFlow({
+      const redirectUrlResponse = await OAuth2Provider.getRedirectURLToContinueOAuthFlow(
+        {
           loginChallenge: queryParams.get("loginChallenge"),
-        });
+        }
+      );
 
       if (redirectUrlResponse.status === "OK") {
         return redirectUrlResponse.frontendRedirectTo;
@@ -143,7 +178,7 @@ export const ComponentWrapper = (props: {
             return () => {
               document.removeEventListener(
                 "visibilitychange",
-                onVisibilityChange,
+                onVisibilityChange
               );
             };
           }, []);
