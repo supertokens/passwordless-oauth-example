@@ -4,10 +4,22 @@ import OAuth2Provider from "supertokens-node/recipe/oauth2provider";
 import Dashboard from "supertokens-node/recipe/dashboard";
 import UserRoles from "supertokens-node/recipe/userroles";
 import type { TypeInput } from "supertokens-node/types";
+import type { RecipeInterface as OAuth2ProviderRecipeInterface } from "supertokens-node/recipe/oauth2provider/types";
 
 export const API_KEY = "e9zZOI7yJ0-G6gms7iGKZ17Pb-";
 export const CONNECTION_URI =
   "https://st-dev-bc3c6f90-79ba-11ef-ab9e-9bd286159eeb.aws.supertokens.io";
+
+let oauth2ProviderRecipeImplementation:
+  | OAuth2ProviderRecipeInterface
+  | undefined;
+
+export function getOAuth2ProviderRecipeImplementationOrThrow(): OAuth2ProviderRecipeInterface {
+  if (!oauth2ProviderRecipeImplementation) {
+    throw new Error("OAuth2Provider recipe not initialized");
+  }
+  return oauth2ProviderRecipeImplementation;
+}
 
 export function getApiDomain() {
   const apiPort = 3001;
@@ -66,6 +78,7 @@ export const SuperTokensConfig: TypeInput = {
     OAuth2Provider.init({
       override: {
         functions: (_originalImplementation) => {
+          oauth2ProviderRecipeImplementation = _originalImplementation;
           return {
             ..._originalImplementation,
             acceptConsentRequest: async function (input) {

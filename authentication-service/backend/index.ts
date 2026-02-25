@@ -10,6 +10,7 @@ import {
 import {
   API_KEY,
   CONNECTION_URI,
+  getOAuth2ProviderRecipeImplementationOrThrow,
   getWebsiteDomain,
   SuperTokensConfig,
 } from "./config.js";
@@ -115,39 +116,38 @@ app.get(
     }
 
     try {
-      const encodedConsentChallenge = encodeURIComponent(consentChallenge);
-      const url = `${CONNECTION_URI}/appid-public/recipe/oauth/auth/requests/consent?consentChallenge=${encodedConsentChallenge}`;
-      const response = await fetch(url, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          "api-key": API_KEY,
-        },
+      const oauth2Provider = getOAuth2ProviderRecipeImplementationOrThrow();
+      const consentRequest = await oauth2Provider.getConsentRequest({
+        challenge: consentChallenge,
+        userContext: {} as any,
       });
 
-      const consentRequest = await readJsonResponse(response);
-
-      if (consentRequest.status === "OAUTH_ERROR") {
-        return res.status(400).json({
+      if ((consentRequest as any).status === "ERROR") {
+        return res.status((consentRequest as any).statusCode ?? 400).json({
           error: "Invalid consent challenge",
-          details: consentRequest.errorDescription || consentRequest.error,
+          details:
+            (consentRequest as any).errorDescription ||
+            (consentRequest as any).error,
         });
       }
 
-      if (consentRequest.subject !== session.getRecipeUserId().getAsString()) {
+      const consentRequestData = consentRequest as any;
+
+      if (
+        consentRequestData.subject !== session.getRecipeUserId().getAsString()
+      ) {
         return res.status(403).json({
           error: "Consent request does not belong to current session",
         });
       }
 
-      // Return consent details to frontend
       res.status(200).json({
         consentChallenge,
-        requestedScopes: consentRequest.requestedScope || [],
+        requestedScopes: consentRequestData.requestedScope || [],
         requestedAccessTokenAudience:
-          consentRequest.requestedAccessTokenAudience || [],
-        clientName: consentRequest.client?.clientName,
-        clientId: consentRequest.client?.clientId,
+          consentRequestData.requestedAccessTokenAudience || [],
+        clientName: consentRequestData.client?.clientName,
+        clientId: consentRequestData.client?.clientId,
       });
     } catch (error) {
       console.error("Error fetching consent request:", error);
@@ -180,74 +180,57 @@ app.post(
     }
 
     try {
-      // Get consent request to see what's being requested
-      const encodedConsentChallenge = encodeURIComponent(consentChallenge);
-      const consentUrl = `${CONNECTION_URI}/appid-public/recipe/oauth/auth/requests/consent?consentChallenge=${encodedConsentChallenge}`;
-      const consentResponse = await fetch(consentUrl, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          "api-key": API_KEY,
-        },
-      });
-      const consentRequest = await readJsonResponse(consentResponse);
+      const oauth2Provider = getOAuth2ProviderRecipeImplementationOrThrow();
 
-      if (consentRequest.status === "OAUTH_ERROR") {
-        return res.status(400).json({
+      const consentRequest = await oauth2Provider.getConsentRequest({
+        challenge: consentChallenge,
+        userContext: {} as any,
+      });
+
+      if ((consentRequest as any).status === "ERROR") {
+        return res.status((consentRequest as any).statusCode ?? 400).json({
           error: "Invalid consent challenge",
-          details: consentRequest.errorDescription || consentRequest.error,
+          details:
+            (consentRequest as any).errorDescription ||
+            (consentRequest as any).error,
         });
       }
 
-      if (consentRequest.subject !== session.getRecipeUserId().getAsString()) {
+      const consentRequestData = consentRequest as any;
+
+      if (
+        consentRequestData.subject !== session.getRecipeUserId().getAsString()
+      ) {
         return res.status(403).json({
           error: "Consent request does not belong to current session",
         });
       }
 
-      // Accept consent with account info in token payload
-      const acceptUrl = `${CONNECTION_URI}/appid-public/recipe/oauth/auth/requests/consent/accept?consentChallenge=${encodedConsentChallenge}`;
-      const acceptRequestBody = {
-        grantScope: consentRequest.requestedScope || [],
+      const acceptInput = {
+        challenge: consentChallenge,
+        grantScope: consentRequestData.requestedScope || [],
         grantAccessTokenAudience:
-          consentRequest.requestedAccessTokenAudience || [],
-        session: {
-          accessToken: {
-            account_id: accountId,
-          },
+          consentRequestData.requestedAccessTokenAudience || [],
+        tenantId: session.getTenantId(),
+        rsub: session.getRecipeUserId().getAsString(),
+        sessionHandle: session.getHandle(),
+        initialAccessTokenPayload: {
+          account_id: accountId,
         },
+        initialIdTokenPayload: {},
+        userContext: {} as any,
       };
-      const acceptResponse = await fetch(acceptUrl, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          "api-key": API_KEY,
-        },
-        body: JSON.stringify(acceptRequestBody),
-      });
 
-      const acceptResponseText = await acceptResponse.text();
-      if (!acceptResponse.ok) {
-        return res.status(400).json({
+      const acceptResult =
+        await oauth2Provider.acceptConsentRequest(acceptInput);
+
+      if (!("redirectTo" in acceptResult)) {
+        return res.status((acceptResult as any).statusCode ?? 400).json({
           error: "Failed to accept consent",
-          details: acceptResponseText,
-          debugRequestBody: acceptRequestBody,
-        });
-      }
-
-      let acceptResult: any;
-      try {
-        acceptResult = JSON.parse(acceptResponseText);
-      } catch {
-        throw new Error(
-          `Non-JSON response from core (${acceptResponse.status}): ${acceptResponseText}`,
-        );
-      }
-
-      if (acceptResult.status === "OAUTH_ERROR") {
-        return res.status(400).json({
-          error: "Failed to accept consent",
-          details: acceptResult.errorDescription || acceptResult.error,
+          details:
+            (acceptResult as any).errorDescription ||
+            (acceptResult as any).error,
+          debugRequestBody: acceptInput,
         });
       }
 
