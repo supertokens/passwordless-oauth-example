@@ -7,6 +7,11 @@ import {
   errorHandler,
   SessionRequest,
 } from "supertokens-node/framework/express";
+import type {
+  ConsentRequest,
+  ErrorOAuth2,
+} from "supertokens-node/recipe/oauth2provider/types";
+import type { UserContext } from "supertokens-node/types";
 import {
   API_KEY,
   CONNECTION_URI,
@@ -32,10 +37,29 @@ app.use(express.json());
 
 app.use(middleware());
 
-async function readJsonResponse(response: Response) {
+const EMPTY_USER_CONTEXT = {} as UserContext;
+
+type AcceptConsentBody = {
+  consentChallenge: string;
+  accountId: string;
+};
+
+function isOAuth2Error(
+  value: ConsentRequest | ErrorOAuth2,
+): value is ErrorOAuth2 {
+  return "status" in value && value.status === "ERROR";
+}
+
+function isOAuth2ErrorResult(
+  value: { status: "OK"; redirectTo: string } | ErrorOAuth2,
+): value is ErrorOAuth2 {
+  return value.status === "ERROR";
+}
+
+async function readJsonResponse<T>(response: Response): Promise<T> {
   const raw = await response.text();
   try {
-    return JSON.parse(raw);
+    return JSON.parse(raw) as T;
   } catch {
     throw new Error(`Non-JSON response from core (${response.status}): ${raw}`);
   }
@@ -119,23 +143,17 @@ app.get(
       const oauth2Provider = getOAuth2ProviderRecipeImplementationOrThrow();
       const consentRequest = await oauth2Provider.getConsentRequest({
         challenge: consentChallenge,
-        userContext: {} as any,
+        userContext: EMPTY_USER_CONTEXT,
       });
 
-      if ((consentRequest as any).status === "ERROR") {
-        return res.status((consentRequest as any).statusCode ?? 400).json({
+      if (isOAuth2Error(consentRequest)) {
+        return res.status(consentRequest.statusCode ?? 400).json({
           error: "Invalid consent challenge",
-          details:
-            (consentRequest as any).errorDescription ||
-            (consentRequest as any).error,
+          details: consentRequest.errorDescription || consentRequest.error,
         });
       }
 
-      const consentRequestData = consentRequest as any;
-
-      if (
-        consentRequestData.subject !== session.getRecipeUserId().getAsString()
-      ) {
+      if (consentRequest.subject !== session.getRecipeUserId().getAsString()) {
         return res.status(403).json({
           error: "Consent request does not belong to current session",
         });
@@ -143,11 +161,11 @@ app.get(
 
       res.status(200).json({
         consentChallenge,
-        requestedScopes: consentRequestData.requestedScope || [],
+        requestedScopes: consentRequest.requestedScope || [],
         requestedAccessTokenAudience:
-          consentRequestData.requestedAccessTokenAudience || [],
-        clientName: consentRequestData.client?.clientName,
-        clientId: consentRequestData.client?.clientId,
+          consentRequest.requestedAccessTokenAudience || [],
+        clientName: consentRequest.client?.clientName,
+        clientId: consentRequest.client?.clientId,
       });
     } catch (error) {
       console.error("Error fetching consent request:", error);
@@ -168,7 +186,8 @@ app.post(
       req.session ? "exists" : "no session",
     );
 
-    const { consentChallenge, accountId } = req.body;
+    const { consentChallenge, accountId } =
+      req.body as Partial<AcceptConsentBody>;
     const session = req.session;
 
     if (!consentChallenge || !accountId) {
@@ -184,23 +203,17 @@ app.post(
 
       const consentRequest = await oauth2Provider.getConsentRequest({
         challenge: consentChallenge,
-        userContext: {} as any,
+        userContext: EMPTY_USER_CONTEXT,
       });
 
-      if ((consentRequest as any).status === "ERROR") {
-        return res.status((consentRequest as any).statusCode ?? 400).json({
+      if (isOAuth2Error(consentRequest)) {
+        return res.status(consentRequest.statusCode ?? 400).json({
           error: "Invalid consent challenge",
-          details:
-            (consentRequest as any).errorDescription ||
-            (consentRequest as any).error,
+          details: consentRequest.errorDescription || consentRequest.error,
         });
       }
 
-      const consentRequestData = consentRequest as any;
-
-      if (
-        consentRequestData.subject !== session.getRecipeUserId().getAsString()
-      ) {
+      if (consentRequest.subject !== session.getRecipeUserId().getAsString()) {
         return res.status(403).json({
           error: "Consent request does not belong to current session",
         });
@@ -208,9 +221,9 @@ app.post(
 
       const acceptInput = {
         challenge: consentChallenge,
-        grantScope: consentRequestData.requestedScope || [],
+        grantScope: consentRequest.requestedScope || [],
         grantAccessTokenAudience:
-          consentRequestData.requestedAccessTokenAudience || [],
+          consentRequest.requestedAccessTokenAudience || [],
         tenantId: session.getTenantId(),
         rsub: session.getRecipeUserId().getAsString(),
         sessionHandle: session.getHandle(),
@@ -218,18 +231,16 @@ app.post(
           account_id: accountId,
         },
         initialIdTokenPayload: {},
-        userContext: {} as any,
+        userContext: EMPTY_USER_CONTEXT,
       };
 
       const acceptResult =
         await oauth2Provider.acceptConsentRequest(acceptInput);
 
-      if (!("redirectTo" in acceptResult)) {
-        return res.status((acceptResult as any).statusCode ?? 400).json({
+      if (isOAuth2ErrorResult(acceptResult)) {
+        return res.status(acceptResult.statusCode ?? 400).json({
           error: "Failed to accept consent",
-          details:
-            (acceptResult as any).errorDescription ||
-            (acceptResult as any).error,
+          details: acceptResult.errorDescription || acceptResult.error,
           debugRequestBody: acceptInput,
         });
       }
@@ -251,7 +262,12 @@ app.post(
 app.use(errorHandler());
 
 app.use(
-  (error: any, _req: express.Request, res: express.Response, _next: any) => {
+  (
+    error: unknown,
+    _req: express.Request,
+    res: express.Response,
+    _next: express.NextFunction,
+  ) => {
     console.error("Unhandled error:", error);
     res.status(500).json({
       success: false,
