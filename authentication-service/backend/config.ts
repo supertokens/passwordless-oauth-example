@@ -6,9 +6,8 @@ import UserRoles from "supertokens-node/recipe/userroles";
 import type { TypeInput } from "supertokens-node/types";
 import type { RecipeInterface as OAuth2ProviderRecipeInterface } from "supertokens-node/recipe/oauth2provider/types";
 
-export const API_KEY = "e9zZOI7yJ0-G6gms7iGKZ17Pb-";
-export const CONNECTION_URI =
-  "https://st-dev-bc3c6f90-79ba-11ef-ab9e-9bd286159eeb.aws.supertokens.io";
+export const API_KEY = "";
+export const CONNECTION_URI = "";
 
 let oauth2ProviderRecipeImplementation:
   | OAuth2ProviderRecipeInterface
@@ -36,9 +35,8 @@ export function getWebsiteDomain() {
 export const SuperTokensConfig: TypeInput = {
   debug: true,
   supertokens: {
-    connectionURI:
-      "https://st-dev-bc3c6f90-79ba-11ef-ab9e-9bd286159eeb.aws.supertokens.io",
-    apiKey: "e9zZOI7yJ0-G6gms7iGKZ17Pb-",
+    connectionURI: API_KEY,
+    apiKey: CONNECTION_URI,
   },
   appInfo: {
     appName: "SuperTokens Demo App",
@@ -95,23 +93,6 @@ export const SuperTokensConfig: TypeInput = {
                 redirectTo: consentRedirectUrl.toString(),
                 status: "OK",
               };
-            },
-          };
-        },
-        apis: (originalImplementation) => {
-          return {
-            ...originalImplementation,
-            authGET: async function (input) {
-              const domain = input.params?.domain;
-              const response = await originalImplementation.authGET!(input);
-
-              if (domain && "redirectTo" in response) {
-                const redirectTo = response.redirectTo;
-                const separator = redirectTo.includes("?") ? "&" : "?";
-                response.redirectTo = `${redirectTo}${separator}domain=${encodeURIComponent(domain)}`;
-              }
-
-              return response;
             },
           };
         },

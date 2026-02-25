@@ -1,6 +1,7 @@
 "use client";
 
 import { useSession, signIn, signOut } from "next-auth/react";
+import Link from "next/link";
 
 export default function Home() {
   const { data: session, status } = useSession();
@@ -28,7 +29,17 @@ export default function Home() {
               <p className="font-semibold text-gray-900">
                 {session.user?.name || session.user?.email || "User"}
               </p>
+              <p className="text-gray-600 mt-3 mb-1">Selected account_id:</p>
+              <p className="font-mono text-sm text-gray-900">
+                {session.accountId || "(not available)"}
+              </p>
             </div>
+            <Link
+              href="/token-info"
+              className="block w-full mb-3 bg-gray-900 hover:bg-black text-white font-medium py-2 px-4 rounded-md transition-colors"
+            >
+              View token info
+            </Link>
             <button
               onClick={() => signOut()}
               className="w-full bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-md transition-colors"

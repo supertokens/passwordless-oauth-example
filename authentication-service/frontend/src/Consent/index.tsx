@@ -20,7 +20,9 @@ export default function Consent() {
   useEffect(() => {
     async function fetchConsentDetails() {
       if (!consentChallenge) {
-        setError("Missing consent challenge");
+        setError(
+          `Missing consent_challenge query parameter. Current URL: ${window.location.href}`,
+        );
         setLoading(false);
         return;
       }
@@ -35,7 +37,9 @@ export default function Consent() {
         const data = await response.json();
 
         if (data.error) {
-          setError(data.error);
+          setError(
+            data.details ? `${data.error}: ${data.details}` : data.error,
+          );
         } else {
           setConsentData(data);
         }
