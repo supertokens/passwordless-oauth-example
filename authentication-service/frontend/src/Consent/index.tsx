@@ -7,8 +7,8 @@ export default function Consent() {
   const [error, setError] = useState<string | null>(null);
   const [consentData, setConsentData] = useState<{
     consentChallenge: string;
-    redirectTo: string;
     requestedScopes: string[];
+    requestedAccessTokenAudience: string[];
     clientName: string;
     clientId: string;
   } | null>(null);
@@ -16,7 +16,6 @@ export default function Consent() {
   const [selectedAccount, setSelectedAccount] = useState("account-1");
 
   const consentChallenge = searchParams.get("consent_challenge");
-  const redirectTo = searchParams.get("redirect_to");
 
   useEffect(() => {
     async function fetchConsentDetails() {
@@ -28,7 +27,10 @@ export default function Consent() {
 
       try {
         const response = await fetch(
-          `${import.meta.env.VITE_API_DOMAIN || "http://localhost:3001"}/auth/oauth/consent?consent_challenge=${consentChallenge}&redirect_to=${encodeURIComponent(redirectTo || "")}`,
+          `${import.meta.env.VITE_API_DOMAIN || "http://localhost:3001"}/auth/oauth/consent?consent_challenge=${encodeURIComponent(consentChallenge)}`,
+          {
+            credentials: "include",
+          },
         );
         const data = await response.json();
 
@@ -45,7 +47,7 @@ export default function Consent() {
     }
 
     fetchConsentDetails();
-  }, [consentChallenge, redirectTo]);
+  }, [consentChallenge]);
 
   const handleAccept = async () => {
     if (!consentData) return;
@@ -63,7 +65,6 @@ export default function Consent() {
           body: JSON.stringify({
             consentChallenge: consentData.consentChallenge,
             accountId: selectedAccount,
-            redirectTo: consentData.redirectTo,
           }),
         },
       );
@@ -74,8 +75,7 @@ export default function Consent() {
         setError(data.error);
         setLoading(false);
       } else {
-        // Redirect to the OAuth client
-        window.location.href = data.redirectUri;
+        window.location.href = data.redirectTo;
       }
     } catch (err) {
       setError("Failed to accept consent");

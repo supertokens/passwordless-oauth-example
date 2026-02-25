@@ -1,14 +1,13 @@
 import Passwordless from "supertokens-node/recipe/passwordless";
-import { SMTPService } from "supertokens-node/recipe/passwordless/emaildelivery";
 import Session from "supertokens-node/recipe/session";
 import OAuth2Provider from "supertokens-node/recipe/oauth2provider";
 import Dashboard from "supertokens-node/recipe/dashboard";
 import UserRoles from "supertokens-node/recipe/userroles";
 import type { TypeInput } from "supertokens-node/types";
 
-export const API_KEY = "";
+export const API_KEY = "e9zZOI7yJ0-G6gms7iGKZ17Pb-";
 export const CONNECTION_URI =
-  "";
+  "https://st-dev-bc3c6f90-79ba-11ef-ab9e-9bd286159eeb.aws.supertokens.io";
 
 export function getApiDomain() {
   const apiPort = 3001;
@@ -66,40 +65,23 @@ export const SuperTokensConfig: TypeInput = {
     }),
     OAuth2Provider.init({
       override: {
-        functions: (originalImplementation) => {
+        functions: (_originalImplementation) => {
           return {
-            ...originalImplementation,
-            // Override to intercept auto-consent and redirect to consent screen
+            ..._originalImplementation,
             acceptConsentRequest: async function (input) {
-              console.log(
-                "acceptConsentRequest called with userContext:",
-                input.userContext,
+              const consentRedirectUrl = new URL(
+                "/oauth/consent",
+                getWebsiteDomain(),
               );
-              // Check if this is being called from the authorization flow (auto-consent)
-              // We detect this via a flag in userContext that the SDK passes
-              if (input.userContext?.__isAutoConsent === true) {
-                console.log(
-                  "Auto-consent detected, redirecting to consent screen",
-                );
-                // Redirect to frontend consent screen instead of auto-accepting
-                const consentRedirectUrl = new URL(
-                  "/oauth/consent",
-                  getWebsiteDomain(),
-                );
-                consentRedirectUrl.searchParams.set(
-                  "consent_challenge",
-                  input.challenge,
-                );
+              consentRedirectUrl.searchParams.set(
+                "consent_challenge",
+                input.challenge,
+              );
 
-                return {
-                  redirectTo: consentRedirectUrl.toString(),
-                  status: "OK",
-                };
-              }
-
-              console.log("Normal consent flow, calling original");
-              // Normal flow - call the original implementation
-              return originalImplementation.acceptConsentRequest!(input);
+              return {
+                redirectTo: consentRedirectUrl.toString(),
+                status: "OK",
+              };
             },
           };
         },
@@ -110,10 +92,10 @@ export const SuperTokensConfig: TypeInput = {
               const domain = input.params?.domain;
               const response = await originalImplementation.authGET!(input);
 
-              if ("redirectTo" in response) {
+              if (domain && "redirectTo" in response) {
                 const redirectTo = response.redirectTo;
-                const redirectToWithDomain = `${redirectTo}&domain=${domain}`;
-                response.redirectTo = redirectToWithDomain;
+                const separator = redirectTo.includes("?") ? "&" : "?";
+                response.redirectTo = `${redirectTo}${separator}domain=${encodeURIComponent(domain)}`;
               }
 
               return response;
