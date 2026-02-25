@@ -6,6 +6,10 @@ import Dashboard from "supertokens-node/recipe/dashboard";
 import UserRoles from "supertokens-node/recipe/userroles";
 import type { TypeInput } from "supertokens-node/types";
 
+export const API_KEY = "";
+export const CONNECTION_URI =
+  "";
+
 export function getApiDomain() {
   const apiPort = 3001;
   const apiUrl = `http://localhost:${apiPort}`;
@@ -21,8 +25,9 @@ export function getWebsiteDomain() {
 export const SuperTokensConfig: TypeInput = {
   debug: true,
   supertokens: {
-    connectionURI: "<SUPERTOKENS_CONNECTION_URI>",
-    apiKey: "<SUPERTOKENS_API_KEY>",
+    connectionURI:
+      "https://st-dev-bc3c6f90-79ba-11ef-ab9e-9bd286159eeb.aws.supertokens.io",
+    apiKey: "e9zZOI7yJ0-G6gms7iGKZ17Pb-",
   },
   appInfo: {
     appName: "SuperTokens Demo App",
@@ -58,53 +63,46 @@ export const SuperTokensConfig: TypeInput = {
           };
         },
       },
-      emailDelivery: {
-        service: new SMTPService({
-          smtpSettings: {
-            host: "<SMTP_HOST>",
-            from: {
-              name: "SuperTokens Demo App",
-              email: "no-reply@example.com",
-            },
-            port: 587,
-            secure: false,
-            authUsername: "<SMTP_USERNAME>",
-            password: "<SMTP_PASSWORD>",
-          },
-          override: (originalImplementation) => {
-            return {
-              ...originalImplementation,
-              getContent: async function (input) {
-                const domain = input.userContext?.domain;
-                const subject = domain
-                  ? `Login to ${domain}`
-                  : "Login to your account";
-                const linkUrl = input.urlWithLinkCode || "";
-                const body = `
-                  <div style="font-family: Arial, sans-serif;">
-                    <h2>Finish signing in</h2>
-                    ${
-                      domain
-                        ? `<p>Signing in to <strong>${domain}</strong></p>`
-                        : ""
-                    }
-                    <p><a href="${linkUrl}">Sign in</a></p>
-                  </div>
-                `;
-                return {
-                  body,
-                  isHtml: true,
-                  subject,
-                  toEmail: input.email,
-                };
-              },
-            };
-          },
-        }),
-      },
     }),
     OAuth2Provider.init({
       override: {
+        functions: (originalImplementation) => {
+          return {
+            ...originalImplementation,
+            // Override to intercept auto-consent and redirect to consent screen
+            acceptConsentRequest: async function (input) {
+              console.log(
+                "acceptConsentRequest called with userContext:",
+                input.userContext,
+              );
+              // Check if this is being called from the authorization flow (auto-consent)
+              // We detect this via a flag in userContext that the SDK passes
+              if (input.userContext?.__isAutoConsent === true) {
+                console.log(
+                  "Auto-consent detected, redirecting to consent screen",
+                );
+                // Redirect to frontend consent screen instead of auto-accepting
+                const consentRedirectUrl = new URL(
+                  "/oauth/consent",
+                  getWebsiteDomain(),
+                );
+                consentRedirectUrl.searchParams.set(
+                  "consent_challenge",
+                  input.challenge,
+                );
+
+                return {
+                  redirectTo: consentRedirectUrl.toString(),
+                  status: "OK",
+                };
+              }
+
+              console.log("Normal consent flow, calling original");
+              // Normal flow - call the original implementation
+              return originalImplementation.acceptConsentRequest!(input);
+            },
+          };
+        },
         apis: (originalImplementation) => {
           return {
             ...originalImplementation,
